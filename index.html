@@ -1,0 +1,348 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+	<div>
+		<input type="text" id="url">
+		<button id="download">下载图片</button>
+		<button id="download_two">下载图片2</button>
+	</div>
+	<br>
+	<div>
+		请输入文件夹名称: <input type="text" id="dir">
+		<button id="change_dir" style="display:none;">更改目录</button>
+		<!-- <input type="file" style="opacity:0;position:absolute;width:0;height:0;" id="file" webkitdirectory directory> -->
+		<input type="file" id="file" webkitdirectory directory>
+		<button id="select_dir">请选择文件</button>
+	</div>
+	<br>
+	<div>
+		<button id="delete_file">删除文件</button>
+	</div>
+	<script>
+		//var nw = require('gui.nw');
+		var fs = require('fs');
+		var os = require('os');
+		var path = require('path');
+		var desktop = os.homedir() + '/desktop';
+		var imageDir = desktop + '/feyinimg'
+		var imageDir2 = desktop + '/images'
+		var http = require('http');
+		var https = require('https');
+		var httpNg;
+		var protocol = '';
+		var hashArray = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+		var fileDir = document.getElementById('dir');
+		var changeDirBtn = document.getElementById('change_dir');
+
+		var urlInput = document.getElementById('url');
+		var downloadBtn = document.getElementById('download');
+		var downloadBtn2 = document.getElementById('download_two');
+		var deleteFileBtn = document.getElementById('delete_file');
+		var selectDirBtn = document.getElementById('select_dir');
+		var file = document.getElementById('file');
+
+		var fileObject;
+
+		downloadBtn.onclick = function (){
+
+			nw.App.clearCache();
+
+			var url = urlInput.value;
+			httpNg = parseHTTP(url)[1] === 'http' ? http : https;
+			protocol = parseHTTP(url)[1];
+
+			//console.log(parseHTTP(url)[1]);
+
+			httpNg.get(url, (res) => {
+				
+				var html = '';
+
+				console.log(res);
+				//res.statusCode = 200;
+
+				res.setEncoding('utf8');
+				res.on('data', function (chunk){
+					html += chunk;
+				});
+				res.on('end', function (){
+					console.log(html);
+					wLog(html);
+					downloadImage(html);
+				});
+
+			})
+
+		}
+
+		var downloadImage = function (html){
+			var arr = getImageUrl(html);
+			saveImage(arr);
+		}
+
+		var getImageUrl = function (html){
+			var imgUrl = [];
+			var reg = /([\w]+:)?\/\/[^"\s]+\.(jpg|png)/g;
+			//var reg = /([\w]+:)?\/\/[^"\s]+\.(jpg|png)|([\w]+:)?\/\/[^"\s]+/g;
+			imgUrl = html.match(reg);
+
+			for(var i = 0, len = imgUrl.length; i < len; i++){
+				if(imgUrl[i].slice(0, 2) === '\/\/'){
+					imgUrl[i] = protocol + ':' + imgUrl[i];
+				}
+			}
+
+			//console.log(imgUrl)
+			return imgUrl;
+		}
+
+		var saveImage = function (arr){
+
+			//console.log('saveImage')
+			//console.log(arr);
+			var logData = '';
+
+			arr.forEach(function (v){
+
+				//console.log(v);
+
+				httpNg.get(v, (res) => {
+					
+					var encoding = getEncoding(res.headers['content-type']);
+					var content = '';
+					var imageName = getImageName(v);
+
+					console.log(v);
+					console.log(imageName);
+					console.dir(res.headers);
+
+					//logData += v + '\r\n' + imageName + '\r\n' + Json.stringify(res.headers) + '\r\n';
+					
+					
+
+					res.setEncoding(encoding);
+					res.on('data', function (chunk){
+						content += chunk;
+					});
+					res.on('end', function (){
+
+						fs.stat(imageDir, function (err){
+							if(err){
+								fs.mkdir(imageDir, function (){
+									wriFile(imageDir + '/' + imageName, content, encoding, function (){});
+								})
+							}else{
+								//fs.writeFile(imageDir + '/' + imageName, content, encoding, function (){});
+								wriFile(imageDir + '/' + imageName, content, encoding, function (){});
+							}
+						});
+
+					});
+				})
+			})
+		}
+
+		var wriFile = function (url, content, encoding, cb){
+			fs.writeFile(url, content, encoding, function (){
+				cb();
+			});
+		}
+
+		var getImageName = function (name){
+			var imageName = '';
+			var i = name.lastIndexOf('\/');
+			imageName = name.slice(i);
+			return imageName;
+		}
+
+		var createHash = function (){
+			var str = '';
+			var i = 16;
+
+			while(i--){
+				str += hashArray[Math.floor(Math.random() * 16)]
+			}
+
+			return str + '.jpg';
+		}
+
+		var getEncoding = function (contentType){
+			var encoding = '';
+			switch(contentType){
+				case 'image/jpeg':
+				encoding = 'binary';
+				break;
+				case 'image/png':
+				encoding = 'binary';
+				break;
+			}
+			return encoding;
+		}
+
+		var parseHTTP = function (str){
+			//console.log(str);
+			var reg = /(\w+):\/\/([^/:]+):?(\d*)/;
+			var result = str.match(reg);
+			return result;
+		}
+
+		downloadBtn2.onclick = function (){
+
+			var url = urlInput.value;
+			httpNg = parseHTTP(url)[1] === 'http' ? http : https;
+			protocol = parseHTTP(url)[1];
+
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function (){
+				//console.log(xhr)
+				if(xhr.status === 200){
+					if(xhr.readyState === 4){
+						console.log(xhr.responseText)
+						wLog('/index.html', xhr.responseText);
+						downloadImage(xhr.responseText);
+					}
+				}
+			}
+			xhr.open('GET', url, true);
+			xhr.send(null)
+		}
+
+		changeDirBtn.onclick = function (){
+			imageDir = desktop + '\/' + fileDir.value
+		}
+
+		deleteFileBtn.onclick = function (){
+			deleteFolder(imageDir);
+		}
+
+		var deleteFolder = function (dir){
+
+			if(fs.statSync(dir).isDirectory()){
+
+				fs.stat(dir, function (err){
+					if(err){
+						console.log('给定的路径不存在， 请给出正确的路径')
+					}
+					else{
+						fs.readdir(dir, function (err, files){
+							if(err) console.log(err);
+							else{
+								files.forEach(function (v){
+									var currentDir = dir + '/' + v;
+									if(fs.statSync(currentDir).isDirectory()){
+										deleteFolder(currentDir);
+									}else{
+										//console.log(currentDir);
+										fs.unlinkSync(currentDir)
+									}
+								})
+								fs.rmdirSync(dir);
+							}
+						})
+					}
+				})
+
+			}
+
+			else{
+				fs.unlinkSync(dir)
+			}
+
+		}
+
+		fileDir.oninput = function (){
+			imageDir = desktop + '/' + fileDir.value;
+		}
+
+		selectDirBtn.onclick = function (){
+			file.click();
+		}
+
+		file.onchange = function (e){
+			console.dir(this);
+			fileObject = this.files.valueOf();
+		}
+
+		var dlimg = function (url){
+			https.get(url, function (res){
+				console.log(res.headers)
+				var data = '';
+				res.setEncoding('binary');
+				res.on('data', function (chunk){
+					data += chunk;
+				});
+				res.on('end', function (){
+					console.log(data)
+					fs.writeFile(desktop + '/testimg/img01.png', data, 'binary', function (err){
+						if(err) console.log(err);
+					})
+				})
+			})
+		}
+
+		var wLog = function (file, data, cb){
+			var log = desktop + '/log';
+			fs.stat(log, function (err){
+				if(err){
+					createFolder(log)
+				}else{
+					fs.writeFile(log + file, data, function (){
+						cb && cb();
+					})
+				}
+			})
+		}
+
+		var createFolder = function (path, cb){
+			fs.mkdir(path, function (){
+				cb && cb();
+			});
+		}
+
+		document.oncontextmenu = function () { return false; };
+        document.onkeydown = function () {
+            if (window.event && window.event.keyCode == 123) {
+                event.keyCode = 0;
+                event.returnValue = false;
+                return false;
+            }
+        };
+
+		function doProhibit()
+		{
+		 if(window.Event) 
+			 document.captureEvents(Event.MOUSEUP);
+		   
+		 function nocontextmenu() 
+		 {
+			 event.cancelBubble = true
+			 event.returnvalue = false;
+			 return false;
+		 }
+		  
+		 function norightclick(e) 
+		 {
+			 if (window.Event)
+			 {
+				if (e.which == 2 || e.which == 3)
+				return false;
+			 }
+			 else if (event.button == 2 || event.button == 3) 
+			 {
+		   event.cancelBubble = true
+		   event.returnvalue = false;
+		   return false;
+			 }
+		 }
+		 document.oncontextmenu = nocontextmenu;  // for IE5+ 
+		 document.onmousedown = norightclick;  // 
+		}
+
+		doProhibit();
+
+	</script>
+</body>
+</html>
